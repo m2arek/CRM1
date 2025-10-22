@@ -5,13 +5,6 @@ import { FaWhatsapp, FaPhone, FaEnvelope } from "react-icons/fa";
 // FRH Pro – fusion complète avec Header/WhatsApp/Formulaire pro/Galerie/Footer/CTA
 
 export default function SiteRelampingLED() {
-  const slides = ["/photo1.jpg", "/photo2.jpg", "/photo3.jpg"];
-const [idx, setIdx] = useState(0);
-useEffect(() => {
-  const t = setInterval(() => setIdx((i) => (i + 1) % slides.length), 4000);
-  return () => clearInterval(t);
-}, []);
-
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
       <TopBar />

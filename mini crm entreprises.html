@@ -272,7 +272,13 @@
         } else {
           input=document.createElement('input'); input.type='text';
         }
-        input.value = activeFilters[h]||''; input.addEventListener('input', ()=> activeFilters[h]=input.value ); wrap.appendChild(input); filtersWrap.appendChild(wrap);
+        const storedValue = activeFilters[h]||'';
+        input.value = input.type==='datetime-local' && storedValue? storedValue.replace(' ', 'T') : storedValue;
+        input.addEventListener('input', ()=>{
+          const raw = input.value;
+          activeFilters[h] = (input.type==='datetime-local')? raw.replace('T',' ') : raw;
+        });
+        wrap.appendChild(input); filtersWrap.appendChild(wrap);
       });
     }
 
@@ -317,7 +323,13 @@
       } else {
         input=document.createElement('input'); input.type='text';
       }
-      input.value = value==null? '' : value; input.addEventListener('input', ()=>{ state.data[state.selected][h] = isTextArea? input.value : input.value; }); wrap.appendChild(input); return wrap;
+      const initialValue = value==null? '' : String(value);
+      input.value = (input.type==='datetime-local' && initialValue)? initialValue.replace(' ', 'T') : initialValue;
+      input.addEventListener('input', ()=>{
+        const raw = input.value;
+        state.data[state.selected][h] = (input.type==='datetime-local')? raw.replace('T',' ') : raw;
+      });
+      wrap.appendChild(input); return wrap;
     }
 
     btnClose.addEventListener('click', closeModal);

@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mini CRM — Workflow modales + Recherche + Paramètres</title>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js" onerror="this.remove()"></script>
+  <style>
+    :root{ --bg:#0b1020; --panel:#121832; --muted:#94a3b8; --c1:#5eead4; --c2:#60a5fa; --border:#243152; --accent:#22d3ee; }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;background:linear-gradient(180deg,#0b1020,#0a0f1d);color:#e5e7eb}
+    header{position:sticky;top:0;z-index:5;background:rgba(12,17,35,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:.8rem 1rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+    .badge{background:#0f1a36;border:1px solid var(--border);padding:.35rem .6rem;border-radius:999px;font-size:.85rem;color:#cbd5e1}
+    .btn{display:inline-flex;align-items:center;gap:.5rem;border:1px solid var(--border);background:#121a35;color:#e5e7eb;padding:.5rem .75rem;border-radius:.7rem;cursor:pointer;transition:all .15s ease;font-weight:600}
+    .btn:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(34,211,238,.15);border-color:#2b3a63}
+    .btn.primary{background:linear-gradient(90deg,var(--c2),var(--accent));color:#0b1020;border-color:transparent}
+    .btn.danger{background:#2a1620;border-color:#6b1b33}
+    input[type="file"],input[type="text"],select{background:#0f172a;color:#e5e7eb;border:1px solid var(--border);border-radius:.6rem;padding:.5rem .6rem}
+    input[type="date"], input[type="datetime-local"]{background:#0f172a;color:#e5e7eb;border:1px solid var(--border);border-radius:.6rem;padding:.45rem .6rem}
+    .layout{display:grid;grid-template-columns:1fr 360px;gap:12px;padding:12px}
+    .panel{background:radial-gradient(1200px 1200px at -10% -20%,rgba(34,211,238,.05),transparent 50%), #0e162f;border:1px solid var(--border);border-radius:16px}
+    #gridWrap{height:72vh;overflow:auto}
+    table{border-collapse:separate;border-spacing:0;width:100%}
+    thead{position:sticky;top:0;background:#0c142c;border-bottom:1px solid var(--border);z-index:2}
+    th,td{border-bottom:1px dashed #1c2747;padding:8px 10px;font-size:.92rem;vertical-align:top}
+    tr.selected{background:rgba(96,165,250,.15)}
+    td[contenteditable="true"]{outline:none}
+    td[contenteditable="true"]:focus{background:#0f1e3d}
+    .sep{height:28px;width:1px;background:var(--border)}
+    .right{display:flex;gap:.5rem;align-items:center;margin-left:auto}
+    .hint{color:#8ea1bf;font-size:.85rem}
+    .tabs{display:flex;border-bottom:1px solid var(--border)}
+    .tab{padding:.5rem .75rem;cursor:pointer;border-bottom:2px solid transparent}
+    .tab.active{border-bottom-color:var(--accent);color:#e2f6ff}
+
+    /* Modales */
+    .overlay{position:fixed;inset:0;background:rgba(4,6,16,.6);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:16px;z-index:9999}
+    .overlay.show{display:flex}
+    .dialog{width:min(900px,96vw);max-height:90vh;overflow:auto;background:#0b142e;border:1px solid var(--border);border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.45);position:relative}
+    .dialog header{position:sticky;top:0;background:#0b142e;padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+    .dialog header h3{margin:0;font-size:1.05rem}
+    .dialog .content{padding:14px}
+    .form-grid{display:grid;grid-template-columns:repeat(2, minmax(240px, 1fr));gap:10px}
+    .form-item{display:grid;gap:6px}
+    .form-item label{color:#a7b9d8;font-size:.85rem}
+    .form-item input, .form-item select, .form-item textarea{background:#0f172a;color:#e5e7eb;border:1px solid var(--border);border-radius:.55rem;padding:.5rem .6rem;width:100%}
+    .form-item textarea{min-height:80px}
+    .dialog footer{position:sticky;bottom:0;background:#0b142e;padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
+    .grow{flex:1}
+  </style>
+</head>
+<body>
+  <header>
+    <strong style="font-size:1.05rem">🗂️ Mini CRM — Entreprises</strong>
+    <span class="badge" id="fileName">Aucun fichier chargé</span>
+    <div class="sep"></div>
+    <button class="btn" id="btnOpenWizard">Assistant d'ouverture</button>
+    <div class="sep"></div>
+    <div class="right">
+      <button class="btn" id="btnExportCSV">Export CSV</button>
+      <button class="btn primary" id="btnExportXLSX">Export XLSX</button>
+      <button class="btn" id="btnOpenJSON">Recharger JSON</button>
+      <button class="btn" id="btnBindJSON">Définir JSON cible</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div class="panel" id="gridWrap">
+      <table id="grid"><thead></thead><tbody></tbody></table>
+    </div>
+    <aside class="panel" style="padding:12px">
+      <div class="tabs">
+        <div class="tab active" data-tab="recherche">Recherche</div>
+        <div class="tab" data-tab="params">Paramètres</div>
+      </div>
+      <div id="pane-recherche">
+        <div class="hint" style="margin:8px 0">Remplis un ou plusieurs critères, puis clique <b>Rechercher</b>.</div>
+        <div id="filters" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn" id="btnApplyFilters">Rechercher</button>
+          <button class="btn" id="btnResetFilters">Réinitialiser</button>
+        </div>
+      </div>
+      <div id="pane-params" style="display:none">
+        <div class="form-item"><label>Valeurs de <b>Statut</b> (une par ligne)</label><textarea id="paramStatus" rows="6"></textarea></div>
+        <div class="form-item"><label>Valeurs de <b>Action à faire</b> (une par ligne)</label><textarea id="paramActions" rows="6"></textarea></div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn" id="btnApplyParams">Appliquer</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Modal1: question charger Excel ? -->
+  <div class="overlay" id="modal1">
+    <div class="dialog">
+      <header><h3>Charger un fichier Excel/CSV ?</h3><div class="grow"></div></header>
+      <div class="content">
+        <p>Souhaites-tu charger un fichier <b>Excel</b> ou <b>CSV</b> maintenant ?</p>
+      </div>
+      <footer>
+        <button class="btn" id="m1No">Non, aller à la page</button>
+        <button class="btn primary" id="m1Yes">Oui, choisir le fichier</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Modal2: choix du fichier Excel/CSV -->
+  <div class="overlay" id="modal2">
+    <div class="dialog">
+      <header><h3>Choisir le fichier Excel/CSV</h3><div class="grow"></div></header>
+      <div class="content">
+        <p>Clique sur <b>Parcourir…</b> pour sélectionner un <b>.xlsx</b> (ou <b>.csv</b>).</p>
+        <input id="m2File" type="file" accept=".xlsx,.xls,.csv" />
+        <p class="hint">Après le chargement, un fichier <code>.json</code> sera créé (même nom). Tu choisiras l'emplacement du JSON (idéalement dans le même dossier que l'Excel/CSV).</p>
+      </div>
+      <footer>
+        <button class="btn" id="m2Cancel">Annuler</button>
+        <button class="btn primary" id="m2Load">Charger</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Modal3: fiche détaillée -->
+  <div class="overlay" id="modal3">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="modal3Title">
+      <header>
+        <h3 id="modal3Title">Fiche</h3>
+        <div class="grow"></div>
+        <span class="hint" id="modal3Pos"></span>
+        <button class="btn" id="btnPrev">⟵ Préc.</button>
+        <button class="btn" id="btnNext">Suiv. ⟶</button>
+        <button class="btn" id="btnDup">Dupliquer</button>
+        <button class="btn danger" id="btnRemove">Supprimer</button>
+        <button class="btn" id="btnClose">Fermer</button>
+      </header>
+      <div class="content">
+        <div class="form-grid" id="modalForm"></div>
+      </div>
+      <footer>
+        <div class="hint" style="margin-right:auto">Dernière sauvegarde: <span id="lastSaved">—</span></div>
+        <button class="btn" id="btnCancel">Annuler</button>
+        <button class="btn primary" id="btnSave">Enregistrer</button>
+      </footer>
+    </div>
+  </div>
+
+  <footer>
+    <span class="hint">Le JSON est écrit localement via l'API File System Access (Chrome/Edge/Opera). Autres navigateurs: un téléchargement sera proposé.</span>
+  </footer>
+
+  <!-- JS principal (quotes ASCII uniquement) -->
+  <script type="module">
+  "use strict";
+  (function(){
+    const SKEY_WIZ = "miniCRM_wizardDone"; // mémorise que l'assistant est terminé (évite le loop)
+
+    const REQUIRED = ["Statut","Action à faire","A rappeler","Alarme","Last update"];
+    const DEFAULT_STATUS = ["À contacter","En cours","Rappel","Devis envoyé","Converti","Pas intéressé","Injoignable","Refusé"];
+    const DEFAULT_ACTIONS = ["Rappeler","Envoyer email","Envoyer devis","Relancer facture","Planifier RDV"];
+
+    const $ = (id)=>document.getElementById(id);
+    const grid=$("grid"), thead=grid.querySelector("thead"), tbody=grid.querySelector("tbody");
+    const fileName=$("fileName");
+    const tabRecherche=document.querySelector('.tab[data-tab="recherche"]');
+    const tabParams=document.querySelector('.tab[data-tab="params"]');
+    const paneRecherche=$("pane-recherche"), paneParams=$("pane-params");
+    const filtersWrap=$("filters");
+    const btnApplyFilters=$("btnApplyFilters"), btnResetFilters=$("btnResetFilters");
+    const paramStatus=$("paramStatus"), paramActions=$("paramActions"), btnApplyParams=$("btnApplyParams");
+    const btnExportCSV=$("btnExportCSV"), btnExportXLSX=$("btnExportXLSX"), btnOpenWizard=$("btnOpenWizard");
+    const btnOpenJSON=$("btnOpenJSON"), btnBindJSON=$("btnBindJSON");
+    const m1=$("modal1"), m2=$("modal2"), m3=$("modal3");
+    const m1Yes=$("m1Yes"), m1No=$("m1No");
+    const m2File=$("m2File"), m2Load=$("m2Load"), m2Cancel=$("m2Cancel");
+    const modalForm=$("modalForm"), modal3Title=$("modal3Title"), modal3Pos=$("modal3Pos"), lastSaved=$("lastSaved");
+    const btnClose=$("btnClose"), btnSave=$("btnSave"), btnCancel=$("btnCancel"), btnPrev=$("btnPrev"), btnNext=$("btnNext"), btnDup=$("btnDup"), btnRemove=$("btnRemove");
+
+    const settings = { status: DEFAULT_STATUS.slice(), actions: DEFAULT_ACTIONS.slice() };
+    const state = { data: [], headers: [], selected: -1, filteredIdx: [], page:1, pageSize:100, backup:null };
+    let datasetFileHandle = null; // JSON cible réutilisé à chaque sauvegarde
+    let wizardDone = false;
+
+    function activateTab(name){
+      document.querySelectorAll('.tab').forEach(t=> t.classList.remove('active'));
+      document.querySelectorAll('[id^="pane-"]').forEach(p=> p.style.display='none');
+      document.querySelector('.tab[data-tab="'+name+'"]').classList.add('active');
+      $("pane-"+name).style.display='block';
+    }
+    tabRecherche.addEventListener('click', ()=> activateTab('recherche'));
+    tabParams.addEventListener('click', ()=> activateTab('params'));
+
+    function splitCRLF(text){
+      const parts = String(text||"").replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n");
+      if(parts.length && parts[parts.length-1]==="") parts.pop();
+      return parts;
+    }
+    function stripBOM(s){ if(!s) return s; return (s.charCodeAt(0)===0xFEFF)? s.slice(1) : s; }
+    function countOcc(s, re){ const m = String(s||"").match(re); return m? m.length : 0; }
+    function detectDelimiter(sampleText){
+      const sample = splitCRLF(sampleText).slice(0,10).join("\n");
+      const counts = { ",": countOcc(sample,/,/g), ";": countOcc(sample,/;/g), "\t": countOcc(sample,/\t/g) };
+      let best=","; let max=-1;
+      for(const k in counts){ const v=counts[k]; if(v>max){ max=v; best=(k==="\t"?"\t":k); } }
+      if(max<=0) best=","; return best;
+    }
+    function parseCsvLine(line, d){
+      const res=[]; let cur=""; let inQ=false; for(let i=0;i<line.length;i++){
+        const ch=line[i], nn=line[i+1];
+        if(ch==='"'){
+          if(inQ && nn==='"'){ cur+='"'; i++; }
+          else { inQ=!inQ; }
+        } else if(ch===d && !inQ){ res.push(cur); cur=""; }
+        else { cur+=ch; }
+      }
+      res.push(cur); return res;
+    }
+    function parseCsv(text){
+      const d = detectDelimiter(text);
+      const lines = splitCRLF(text).filter(l=>l.trim().length>0);
+      if(!lines.length) return [];
+      const headersRaw = parseCsvLine(lines[0], d); headersRaw[0]=stripBOM(headersRaw[0]);
+      const headers = headersRaw;
+      const rows=[]; for(let i=1;i<lines.length;i++){
+        const vals=parseCsvLine(lines[i], d); const obj={};
+        for(let h=0; h<headers.length; h++){ obj[headers[h]] = (h<vals.length? vals[h] : ""); }
+        rows.push(obj);
+      }
+      return rows;
+    }
+
+    function ensureColumns(rows){
+      if(!rows.length){ state.headers = REQUIRED.slice(); return rows; }
+      const headerSet = new Set(Object.keys(rows[0]));
+      REQUIRED.forEach(k=>{ if(!headerSet.has(k)){ rows.forEach(r=> r[k]=""); headerSet.add(k);} });
+      state.headers = Array.from(headerSet);
+      return rows;
+    }
+    function inferTitle(r,i){ return r['Raison sociale'] || r['Entreprise'] || r['Nom'] || ("Fiche "+(i+1)); }
+    function pad2(n){ return String(n).padStart(2,"0"); }
+    function formatDT(d){ return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate())+" "+pad2(d.getHours())+":"+pad2(d.getMinutes()); }
+    function escQuotes(v){ return String(v==null? "": v).split('"').join('""'); }
+    function toCSV(rows, headers){
+      const head = headers.map(h=>'"' + escQuotes(h) + '"').join(',');
+      const body = rows.map(r=> headers.map(h=>'"' + escQuotes(r[h]) + '"').join(',')).join('\n');
+      return head + '\n' + body;
+    }
+    function replaceExt(name, newExt){ const i = name.lastIndexOf('.'); return (i>=0? name.slice(0,i): name) + newExt; }
+
+    function renderHead(){ thead.innerHTML=''; const tr=document.createElement('tr'); state.headers.forEach(h=>{ const th=document.createElement('th'); th.textContent=h; tr.appendChild(th); }); thead.appendChild(tr); }
+    function renderBody(){
+      tbody.innerHTML=''; const idx = computeFiltered(); const total=idx.length; const pages=Math.max(1, Math.ceil(total/state.pageSize)); if(state.page>pages) state.page=pages; const start=(state.page-1)*state.pageSize; const end=Math.min(start+state.pageSize, total);
+      for(let p=start; p<end; p++){
+        const i=idx[p]; const r=state.data[i]; const tr=document.createElement('tr'); if(i===state.selected) tr.classList.add('selected'); tr.addEventListener('click',()=>{ openModal(i); });
+        state.headers.forEach(h=>{ const td=document.createElement('td'); td.contentEditable=true; td.spellcheck=false; td.textContent=r[h]??''; td.addEventListener('input', ()=>{ r[h]=td.textContent; }); tr.appendChild(td); });
+        tbody.appendChild(tr);
+      }
+      updateFiltersPanel();
+    }
+
+    const activeFilters = {};
+    function updateFiltersPanel(){
+      filtersWrap.innerHTML='';
+      state.headers.forEach(h=>{
+        const key=h.toLowerCase(); const wrap=document.createElement('div'); wrap.className='form-item'; const lab=document.createElement('label'); lab.textContent=h; wrap.appendChild(lab);
+        let input; if(h==='Statut'){
+          input=document.createElement('select'); const any=document.createElement('option'); any.value=''; any.textContent='—'; input.appendChild(any); settings.status.forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; input.appendChild(o); });
+        } else if(h==='Action à faire'){
+          input=document.createElement('select'); const any=document.createElement('option'); any.value=''; any.textContent='—'; input.appendChild(any); settings.actions.forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; input.appendChild(o); });
+        } else if(key.indexOf('date')!==-1 || key.indexOf('alarme')!==-1 || key.indexOf('rappeler')!==-1 || key.indexOf('update')!==-1){
+          input=document.createElement('input'); input.type=(h==='Last update')? 'datetime-local':'date';
+        } else {
+          input=document.createElement('input'); input.type='text';
+        }
+        input.value = activeFilters[h]||''; input.addEventListener('input', ()=> activeFilters[h]=input.value ); wrap.appendChild(input); filtersWrap.appendChild(wrap);
+      });
+    }
+
+    function computeFiltered(){
+      const idx=[]; outer: for(let i=0;i<state.data.length;i++){
+        const r=state.data[i];
+        for(const h of Object.keys(activeFilters)){
+          const v=(activeFilters[h]||'').trim(); if(!v) continue; const key=h.toLowerCase(); const cell=String(r[h]||'');
+          if(h==='Statut' || h==='Action à faire'){ if(v && cell!==v) continue outer; }
+          else if(key.indexOf('date')!==-1 || key.indexOf('alarme')!==-1 || key.indexOf('rappeler')!==-1 || key.indexOf('update')!==-1){ const d1 = (h==='Last update')? (cell.slice(0,16)) : (cell.slice(0,10)); if(d1!==v) continue outer; }
+          else { if(cell.toLowerCase().indexOf(v.toLowerCase())===-1) continue outer; }
+        }
+        idx.push(i);
+      }
+      state.filteredIdx=idx; return idx;
+    }
+    btnApplyFilters.addEventListener('click', ()=>{ state.page=1; renderBody(); });
+    btnResetFilters.addEventListener('click', ()=>{ Object.keys(activeFilters).forEach(k=> delete activeFilters[k]); updateFiltersPanel(); state.page=1; renderBody(); });
+
+    function openModal(i){ state.selected=i; state.backup=JSON.parse(JSON.stringify(state.data[i])); buildModal(i); m3.classList.add('show'); updateModalPos(); }
+    function closeModal(){ m3.classList.remove('show'); state.backup=null; }
+    function updateModalPos(){ const idx=state.filteredIdx; const pos=idx.indexOf(state.selected); modal3Pos.textContent = (pos+1)+' / '+idx.length; }
+    function buildModal(i){ const r=state.data[i]; modal3Title.textContent=inferTitle(r,i); modalForm.innerHTML=''; state.headers.forEach(h=>{ modalForm.appendChild(makeField(h, r[h], h.toLowerCase())); }); }
+    function makeField(h, value, key){
+      const wrap=document.createElement('div'); wrap.className='form-item'; const lab=document.createElement('label'); lab.textContent=h; wrap.appendChild(lab);
+      let input,isTextArea=false; if(h==='Statut'){
+        input=document.createElement('select'); settings.status.forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; input.appendChild(o); });
+      } else if(h==='Action à faire'){
+        input=document.createElement('select'); settings.actions.forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; input.appendChild(o); });
+      } else if(h==='Last update'){
+        input=document.createElement('input'); input.type='datetime-local'; input.disabled=true;
+      } else if(h==='A rappeler' || h==='Alarme' || key.indexOf('date')!==-1){
+        input=document.createElement('input'); input.type='date';
+      } else if(key.indexOf('email')!==-1 || key.indexOf('mail')!==-1){
+        input=document.createElement('input'); input.type='email';
+      } else if(key.indexOf('site')!==-1 || key.indexOf('web')!==-1 || key.indexOf('url')!==-1){
+        input=document.createElement('input'); input.type='url';
+      } else if(key.indexOf('tel')!==-1 || key.indexOf('téléphone')!==-1 || key.indexOf('phone')!==-1){
+        input=document.createElement('input'); input.type='tel';
+      } else if(key.indexOf('note')!==-1 || key.indexOf('commentaire')!==-1 || key.indexOf('commentaires')!==-1 || key.indexOf('description')!==-1){
+        input=document.createElement('textarea'); input.style.minHeight='100px'; isTextArea=true;
+      } else {
+        input=document.createElement('input'); input.type='text';
+      }
+      input.value = value==null? '' : value; input.addEventListener('input', ()=>{ state.data[state.selected][h] = isTextArea? input.value : input.value; }); wrap.appendChild(input); return wrap;
+    }
+
+    btnClose.addEventListener('click', closeModal);
+    btnCancel.addEventListener('click', ()=>{ if(state.backup){ state.data[state.selected]=state.backup; } renderBody(); closeModal(); });
+    btnSave.addEventListener('click', async ()=>{ const now = new Date(); state.data[state.selected]['Last update'] = formatDT(now); lastSaved.textContent = formatDT(now); await saveDatasetJSON(); renderBody(); updateModalPos(); });
+    btnPrev.addEventListener('click', ()=>{ const arr=state.filteredIdx; const pos=arr.indexOf(state.selected); if(pos>0){ openModal(arr[pos-1]); renderBody(); } });
+    btnNext.addEventListener('click', ()=>{ const arr=state.filteredIdx; const pos=arr.indexOf(state.selected); if(pos>=0 && pos<arr.length-1){ openModal(arr[pos+1]); renderBody(); } });
+    btnDup.addEventListener('click', ()=>{ const copy=JSON.parse(JSON.stringify(state.data[state.selected])); state.data.splice(state.selected+1,0,copy); renderBody(); updateModalPos(); });
+    btnRemove.addEventListener('click', ()=>{ if(confirm('Supprimer cette fiche ?')){ const i=state.selected; const arr=state.filteredIdx; const pos=arr.indexOf(i); state.data.splice(i,1); renderBody(); if(arr[pos]){ const nextIdx = Math.min(arr[pos]||0, state.data.length-1); if(nextIdx>=0) openModal(nextIdx); else closeModal(); } else { closeModal(); } }});
+
+    document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && m3.classList.contains('show')){ e.preventDefault(); closeModal(); } if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){ e.preventDefault(); if(m3.classList.contains('show')) btnSave.click(); else btnExportXLSX.click(); } });
+
+    btnExportCSV.addEventListener('click', ()=>{ if(state.data.length===0){ alert("Rien à exporter."); return; } const csv=toCSV(state.data, state.headers); download(csv,'entreprises.csv','text/csv'); });
+    btnExportXLSX.addEventListener('click', ()=>{ if(state.data.length===0 || !window.XLSX){ alert("Rien à exporter ou XLSX indisponible."); return; } const ws=XLSX.utils.json_to_sheet(state.data,{header:state.headers}); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Entreprises'); XLSX.writeFile(wb,'entreprises.xlsx'); });
+
+    function showModal(el){ el.classList.add('show'); }
+    function hideModal(el){ el.classList.remove('show'); }
+    function finishWizard(){
+      try{ hideModal(m1); hideModal(m2);}catch(_){ }
+      wizardDone = true;
+      try{ sessionStorage.setItem(SKEY_WIZ,'1'); }catch(_){ }
+      try{ if(m1 && document.body.contains(m1)) m1.remove(); }catch(_){ }
+      try{ if(m2 && document.body.contains(m2)) m2.remove(); }catch(_){ }
+      if(btnOpenWizard){ btnOpenWizard.disabled = true; btnOpenWizard.textContent = 'Assistant terminé'; }
+    }
+
+    async function verifyPermission(fileHandle, readWrite){ if(!fileHandle) return false; const opts = { mode: readWrite? 'readwrite' : 'read' }; if((await fileHandle.queryPermission(opts)) === 'granted') return true; if((await fileHandle.requestPermission(opts)) === 'granted') return true; return false; }
+    async function chooseJsonTarget(suggestedName){ if(!window.showSaveFilePicker){ datasetFileHandle=null; return; } try{ const handle = await showSaveFilePicker({ suggestedName, types:[{description:'JSON', accept:{'application/json':['.json']}}] }); const ok = await verifyPermission(handle, true); if(!ok){ alert("Permission refusée: je ne pourrai pas écrire dans ce JSON."); return; } datasetFileHandle = handle; }catch(e){ if(e && e.name!=='AbortError') alert("Choix du fichier JSON annulé ou impossible."); } }
+    async function saveDatasetJSON(){ try{ const data = JSON.stringify(state.data, null, 2); if(window.showSaveFilePicker){ if(!datasetFileHandle){ await chooseJsonTarget('entreprises.json'); } if(datasetFileHandle && datasetFileHandle.createWritable){ await verifyPermission(datasetFileHandle, true); const w=await datasetFileHandle.createWritable(); await w.write(data); await w.close(); return; } } download(data, 'entreprises.json', 'application/json'); }catch(e){ alert("Écriture JSON impossible. Un téléchargement sera proposé."); download(JSON.stringify(state.data,null,2),'entreprises.json','application/json'); } }
+     async function pickOpenJSON(){ if(!window.showOpenFilePicker){ alert("Navigateur non supporté. Utilise Export/Import."); return; } try{ const picks = await showOpenFilePicker({ types:[{description:'JSON', accept:{'application/json':['.json']}}], multiple:false }); const h=picks && picks[0]; if(!h) return; const f=await h.getFile(); const text=await f.text(); const rows=JSON.parse(text); if(!Array.isArray(rows)){ alert("JSON invalide."); return; } ensureColumns(rows); state.data=rows; fileName.textContent = f.name + ' — ' + state.data.length + ' lignes'; renderHead(); state.page=1; renderBody(); datasetFileHandle = h; finishWizard(); }catch(e){ if(e && e.name!=='AbortError') alert("Ouverture JSON annulée ou impossible."); } }
+
+    function download(content, filename, type){ const blob=new Blob([content],{type}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 500); }
+
+    async function loadFromPicker(file){
+      const ext = file.name.toLowerCase().split('.').pop(); fileName.textContent=file.name;
+      if(ext==='csv'){
+        const text = await file.text(); let rows = parseCsv(text); rows = ensureColumns(rows); state.data = rows; fileName.textContent = file.name + ' — ' + state.data.length + ' lignes'; renderHead(); state.page=1; renderBody(); await chooseJsonTarget(replaceExt(file.name, '.json')); await saveDatasetJSON();
+      } else {
+        if(!window.XLSX){ alert("Lecture XLSX indisponible. Convertis en CSV ou connecte Internet."); return; }
+        const buf = await file.arrayBuffer(); const wb = XLSX.read(new Uint8Array(buf), {type:'array'}); const name = wb.SheetNames[0]; const sheet = wb.Sheets[name]; let rows = XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false}); rows = ensureColumns(rows); state.data=rows; fileName.textContent = file.name + ' — ' + state.data.length + ' lignes'; renderHead(); state.page=1; renderBody(); await chooseJsonTarget(replaceExt(file.name, '.json')); await saveDatasetJSON();
+      }
+      finishWizard();
+    }
+
+    btnOpenWizard.addEventListener('click', ()=>{ if(wizardDone) return; if(!document.body.contains(m1)) return; showModal(m1); });
+    m1Yes.addEventListener('click', ()=>{ hideModal(m1); showModal(m2); });
+    m1No.addEventListener('click', ()=>{ hideModal(m1); finishWizard(); });
+    m2Cancel.addEventListener('click', ()=>{ hideModal(m2); });
+    m2Load.addEventListener('click', async ()=>{ const f = m2File.files && m2File.files[0]; if(!f){ alert("Sélectionne un fichier."); return; } hideModal(m2); await loadFromPicker(f); });
+    btnOpenJSON.addEventListener('click', pickOpenJSON);
+    btnBindJSON.addEventListener('click', async()=>{ await chooseJsonTarget('entreprises.json'); });
+
+    function refreshParamsUI(){
+      paramStatus.value = settings.status.join('\n');
+      paramActions.value = settings.actions.join('\n');
+    }
+    btnApplyParams.addEventListener('click', ()=>{ const s = splitCRLF(paramStatus.value).map(x=>x.trim()).filter(Boolean); const a = splitCRLF(paramActions.value).map(x=>x.trim()).filter(Boolean); if(s.length) settings.status=s; if(a.length) settings.actions=a; renderBody(); if(m3.classList.contains('show')) buildModal(state.selected); });
+
+    function runTests(){
+      const log=[]; let ok=true; const t=(n,c)=>{ if(!c){ok=false; log.push('❌ '+n);} else {log.push('✅ '+n);} };
+      const a = splitCRLF('a\r\nb\n'); t('splitCRLF len', a.length===2 && a[0]==='a' && a[1]==='b');
+      t('replaceExt .xlsx', replaceExt('foo.xlsx','.json')==='foo.json');
+      t('replaceExt no ext', replaceExt('foo','.json')==='foo.json');
+      const csv='A,B\n1,2\n3,4'; const r=parseCsv(csv); t('parseCsv 2 lignes', r.length===2 && r[0].A==='1' && r[1].B==='4');
+      t('detectDelimiter comma', detectDelimiter(csv)===',');
+      const csv2='A;B\n1;2\n3;4'; t('detectDelimiter semicolon', detectDelimiter(csv2)===';');
+      const csv3='A\tB\n1\t2\n3\t4'; t('detectDelimiter tab', detectDelimiter(csv3)=='\t');
+      const csvOut = toCSV([{A:'1',B:'x, y'},{A:'"q"'}], ['A','B']);
+      t('toCSV quotes', csvOut.indexOf('"x, y"')>-1 && csvOut.indexOf('""q""')>-1);
+      console.log('[MiniCRM tests]', log.join(' | '));
+      if(!ok){ try{ alert('Tests internes: des échecs (voir console)'); }catch(_){ } }
+    }
+
+    function boot(){
+      try{ if(sessionStorage.getItem(SKEY_WIZ)==='1'){ wizardDone=true; if(btnOpenWizard){ btnOpenWizard.disabled=true; btnOpenWizard.textContent='Assistant terminé'; } } }catch(_){ }
+      state.data=[]; state.headers=[]; state.filteredIdx=[];
+      renderHead(); renderBody(); refreshParamsUI();
+      if(!wizardDone && state.data.length===0){ showModal(m1); } else { hideModal(m1); hideModal(m2); }
+      activateTab('recherche');
+    }
+    boot();
+    runTests();
+  })();
+  </script>
+</body>
+</html>

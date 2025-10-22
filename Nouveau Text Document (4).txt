@@ -1,0 +1,8 @@
+cd "C:\Users\pmaar\Desktop\corse leds\site-relamping-led"
+
+npm install
+npm run dev
+
+
+npm install
+npm run dev

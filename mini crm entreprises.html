@@ -19,7 +19,9 @@
     input[type="date"], input[type="datetime-local"]{background:#0f172a;color:#e5e7eb;border:1px solid var(--border);border-radius:.6rem;padding:.45rem .6rem}
     .layout{display:grid;grid-template-columns:1fr 360px;gap:12px;padding:12px}
     .panel{background:radial-gradient(1200px 1200px at -10% -20%,rgba(34,211,238,.05),transparent 50%), #0e162f;border:1px solid var(--border);border-radius:16px}
-    #gridWrap{height:72vh;overflow:auto}
+    #gridWrap{height:72vh;overflow:auto;position:relative}
+    #noResults{display:none;position:absolute;inset:0;padding:24px;justify-content:center;align-items:center;text-align:center;background:rgba(11,16,32,.94);border:1px dashed var(--border);border-radius:16px;z-index:1}
+    #noResults p{margin-top:0;margin-bottom:12px;color:var(--muted)}
     table{border-collapse:separate;border-spacing:0;width:100%}
     thead{position:sticky;top:0;background:#0c142c;border-bottom:1px solid var(--border);z-index:2}
     th,td{border-bottom:1px dashed #1c2747;padding:8px 10px;font-size:.92rem;vertical-align:top}
@@ -66,6 +68,12 @@
 
   <div class="layout">
     <div class="panel" id="gridWrap">
+      <div id="noResults" class="empty-state">
+        <div>
+          <p>Aucun résultat ne correspond à ces filtres.</p>
+          <button class="btn" id="btnNoResultsReset">Réinitialiser les filtres</button>
+        </div>
+      </div>
       <table id="grid"><thead></thead><tbody></tbody></table>
     </div>
     <aside class="panel" style="padding:12px">
@@ -160,7 +168,7 @@
     const DEFAULT_ACTIONS = ["Rappeler","Envoyer email","Envoyer devis","Relancer facture","Planifier RDV"];
 
     const $ = (id)=>document.getElementById(id);
-    const grid=$("grid"), thead=grid.querySelector("thead"), tbody=grid.querySelector("tbody");
+    const grid=$("grid"), thead=grid.querySelector("thead"), tbody=grid.querySelector("tbody"), noResults=$("noResults");
     const fileName=$("fileName");
     const tabRecherche=document.querySelector('.tab[data-tab="recherche"]');
     const tabParams=document.querySelector('.tab[data-tab="params"]');
@@ -169,6 +177,7 @@
     const btnApplyFilters=$("btnApplyFilters"), btnResetFilters=$("btnResetFilters");
     const paramStatus=$("paramStatus"), paramActions=$("paramActions"), btnApplyParams=$("btnApplyParams");
     const btnExportCSV=$("btnExportCSV"), btnExportXLSX=$("btnExportXLSX"), btnOpenWizard=$("btnOpenWizard");
+    const btnNoResultsReset=$("btnNoResultsReset");
     const btnOpenJSON=$("btnOpenJSON"), btnBindJSON=$("btnBindJSON");
     const m1=$("modal1"), m2=$("modal2"), m3=$("modal3");
     const m1Yes=$("m1Yes"), m1No=$("m1No");
@@ -250,6 +259,14 @@
     function renderHead(){ thead.innerHTML=''; const tr=document.createElement('tr'); state.headers.forEach(h=>{ const th=document.createElement('th'); th.textContent=h; tr.appendChild(th); }); thead.appendChild(tr); }
     function renderBody(){
       tbody.innerHTML=''; const idx = computeFiltered(); const total=idx.length; const pages=Math.max(1, Math.ceil(total/state.pageSize)); if(state.page>pages) state.page=pages; const start=(state.page-1)*state.pageSize; const end=Math.min(start+state.pageSize, total);
+      const hasActiveFilters = Object.keys(activeFilters).some(k=> (activeFilters[k]||'').trim());
+      if(total===0 && hasActiveFilters){
+        if(grid) grid.style.display='none';
+        if(noResults) noResults.style.display='flex';
+      } else {
+        if(grid) grid.style.display='';
+        if(noResults) noResults.style.display='none';
+      }
       for(let p=start; p<end; p++){
         const i=idx[p]; const r=state.data[i]; const tr=document.createElement('tr'); if(i===state.selected) tr.classList.add('selected'); tr.addEventListener('click',()=>{ openModal(i); });
         state.headers.forEach(h=>{ const td=document.createElement('td'); td.contentEditable=true; td.spellcheck=false; td.textContent=r[h]??''; td.addEventListener('input', ()=>{ r[h]=td.textContent; }); tr.appendChild(td); });
@@ -291,6 +308,7 @@
     }
     btnApplyFilters.addEventListener('click', ()=>{ state.page=1; renderBody(); });
     btnResetFilters.addEventListener('click', ()=>{ Object.keys(activeFilters).forEach(k=> delete activeFilters[k]); updateFiltersPanel(); state.page=1; renderBody(); });
+    if(btnNoResultsReset){ btnNoResultsReset.addEventListener('click', ()=> btnResetFilters.click()); }
 
     function openModal(i){ state.selected=i; state.backup=JSON.parse(JSON.stringify(state.data[i])); buildModal(i); m3.classList.add('show'); updateModalPos(); }
     function closeModal(){ m3.classList.remove('show'); state.backup=null; }

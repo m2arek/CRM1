@@ -200,6 +200,12 @@
     let datasetFileHandle = null; // JSON cible réutilisé à chaque sauvegarde
     let wizardDone = readWizardFlag();
 
+    function updateWizardButton(){
+      if(!btnOpenWizard) return;
+      btnOpenWizard.disabled = false;
+      btnOpenWizard.textContent = wizardDone ? 'Relancer l\'assistant' : 'Assistant d\'ouverture';
+    }
+
     function activateTab(name){
       document.querySelectorAll('.tab').forEach(t=> t.classList.remove('active'));
       document.querySelectorAll('[id^="pane-"]').forEach(p=> p.style.display='none');
@@ -404,9 +410,7 @@
       try{ hideModal(m1); hideModal(m2);}catch(_){ }
       wizardDone = true;
       persistWizardFlag(true);
-      try{ if(m1 && document.body.contains(m1)) m1.remove(); }catch(_){ }
-      try{ if(m2 && document.body.contains(m2)) m2.remove(); }catch(_){ }
-      if(btnOpenWizard){ btnOpenWizard.disabled = true; btnOpenWizard.textContent = 'Assistant terminé'; }
+      updateWizardButton();
     }
 
     async function verifyPermission(fileHandle, readWrite){ if(!fileHandle) return false; const opts = { mode: readWrite? 'readwrite' : 'read' }; if((await fileHandle.queryPermission(opts)) === 'granted') return true; if((await fileHandle.requestPermission(opts)) === 'granted') return true; return false; }
@@ -513,7 +517,17 @@
       }
     }
 
-    btnOpenWizard.addEventListener('click', ()=>{ if(wizardDone) return; if(!document.body.contains(m1)) return; showModal(m1); });
+    btnOpenWizard.addEventListener('click', ()=>{
+      if(!document.body.contains(m1)) return;
+      wizardDone = false;
+      persistWizardFlag(false);
+      datasetDirectoryHandle = null;
+      datasetFileHandle = null;
+      updateWizardButton();
+      try{ hideModal(m2);}catch(_){ }
+      m2File.value='';
+      showModal(m1);
+    });
     m1Yes.addEventListener('click', ()=>{ hideModal(m1); showModal(m2); });
     m1No.addEventListener('click', ()=>{ hideModal(m1); finishWizard(); });
     m2Cancel.addEventListener('click', ()=>{ hideModal(m2); });
@@ -551,6 +565,7 @@
         hideModal(m2);
         if(wizardDone) finishWizard();
       }
+      updateWizardButton();
       activateTab('recherche');
     }
     boot();

@@ -424,7 +424,6 @@
           if(!ok){ alert("Permission refusée: je ne pourrai pas écrire dans ce JSON."); return; }
           datasetDirectoryHandle = null;
           datasetFileHandle = handle;
-          finishWizard();
           return;
         }catch(e){
           if(e && e.name==='AbortError'){ if(typeof e==='object') e.userMessageShown = true; throw e; }
@@ -440,7 +439,6 @@
           const okFile = await verifyPermission(fh, true);
           if(!okFile){ alert("Permission refusée: impossible d'écrire dans ce dossier."); return; }
           datasetFileHandle = fh;
-          finishWizard();
           return;
         }catch(e){
           console.warn('Impossible de récupérer le fichier JSON depuis le dossier enregistré', e);
@@ -458,7 +456,6 @@
           if(!okFile){ alert("Permission refusée: je ne pourrai pas écrire dans ce JSON."); return; }
           datasetDirectoryHandle = dir;
           datasetFileHandle = fileHandle;
-          finishWizard();
           return;
         }catch(e){
           if(e && e.name==='AbortError'){ if(typeof e==='object') e.userMessageShown = true; throw e; }
@@ -495,14 +492,28 @@
     }
 
     async function loadFromPicker(file){
-      const ext = file.name.toLowerCase().split('.').pop(); fileName.textContent=file.name;
+      const ext = file.name.toLowerCase().split('.').pop();
+      const previousLabel = fileName.textContent;
+      const previousData = state.data.slice();
+      const previousHeaders = state.headers.slice();
+      const previousFiltered = state.filteredIdx.slice();
+      const previousPage = state.page;
+      const previousDirHandle = datasetDirectoryHandle;
+      const previousFileHandle = datasetFileHandle;
+      fileName.textContent=file.name;
       try{
         if(ext==='csv'){
           const text = await file.text(); let rows = parseCsv(text); rows = ensureColumns(rows); state.data = rows; fileName.textContent = file.name + ' — ' + state.data.length + ' lignes'; renderHead(); state.page=1; renderBody(); datasetDirectoryHandle=null; datasetFileHandle=null; await ensureJsonTarget(replaceExt(file.name, '.json')); await saveDatasetJSON();
         } else {
-          if(!window.XLSX){ alert("Lecture XLSX indisponible. Convertis en CSV ou connecte Internet."); return; }
+          if(!window.XLSX){
+            alert("Lecture XLSX indisponible. Convertis en CSV ou connecte Internet.");
+            const err = new Error('Lecture XLSX indisponible');
+            err.userMessageShown = true;
+            throw err;
+          }
           const buf = await file.arrayBuffer(); const wb = XLSX.read(new Uint8Array(buf), {type:'array'}); const name = wb.SheetNames[0]; const sheet = wb.Sheets[name]; let rows = XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false}); rows = ensureColumns(rows); state.data=rows; fileName.textContent = file.name + ' — ' + state.data.length + ' lignes'; renderHead(); state.page=1; renderBody(); datasetDirectoryHandle=null; datasetFileHandle=null; await ensureJsonTarget(replaceExt(file.name, '.json')); await saveDatasetJSON();
         }
+        finishWizard();
       }catch(e){
         console.error('Chargement depuis le sélecteur impossible', e);
         if(!e || !e.userMessageShown){
@@ -512,8 +523,19 @@
             alert('Chargement interrompu: ' + msg);
           }
         }
-      }finally{
-        finishWizard();
+        fileName.textContent = previousLabel;
+        state.data = previousData;
+        state.headers = previousHeaders;
+        state.filteredIdx = previousFiltered;
+        state.page = previousPage;
+        renderHead();
+        renderBody();
+        datasetDirectoryHandle = previousDirHandle;
+        datasetFileHandle = previousFileHandle;
+        wizardDone = false;
+        persistWizardFlag(false);
+        updateWizardButton();
+        if(document.body.contains(m2)){ showModal(m2); }
       }
     }
 

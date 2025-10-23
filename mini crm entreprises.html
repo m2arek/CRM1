@@ -326,7 +326,15 @@
     btnResetFilters.addEventListener('click', ()=>{ Object.keys(activeFilters).forEach(k=> delete activeFilters[k]); updateFiltersPanel(); state.page=1; renderBody(); });
     if(btnNoResultsReset){ btnNoResultsReset.addEventListener('click', ()=> btnResetFilters.click()); }
 
-    function openModal(i){ state.selected=i; state.backup=JSON.parse(JSON.stringify(state.data[i])); buildModal(i); m3.classList.add('show'); updateModalPos(); }
+    function openModal(i){
+      state.selected=i;
+      state.backup=JSON.parse(JSON.stringify(state.data[i]));
+      const last = state.data[i] && state.data[i]['Last update'];
+      lastSaved.textContent = last && String(last).trim()? last : '—';
+      buildModal(i);
+      m3.classList.add('show');
+      updateModalPos();
+    }
     function closeModal(){ m3.classList.remove('show'); state.backup=null; }
     function updateModalPos(){ const idx=state.filteredIdx; const pos=idx.indexOf(state.selected); modal3Pos.textContent = (pos+1)+' / '+idx.length; }
     function buildModal(i){ const r=state.data[i]; modal3Title.textContent=inferTitle(r,i); modalForm.innerHTML=''; state.headers.forEach(h=>{ modalForm.appendChild(makeField(h, r[h], h.toLowerCase())); }); }
@@ -362,7 +370,24 @@
 
     btnClose.addEventListener('click', closeModal);
     btnCancel.addEventListener('click', ()=>{ if(state.backup){ state.data[state.selected]=state.backup; } renderBody(); closeModal(); });
-    btnSave.addEventListener('click', async ()=>{ const now = new Date(); state.data[state.selected]['Last update'] = formatDT(now); lastSaved.textContent = formatDT(now); try{ await saveDatasetJSON(); }catch(err){ console.error('Sauvegarde via fiche impossible', err); if(!(err && err.name==='AbortError') && (!err || !err.userMessageShown)){ alert("Impossible de sauvegarder les modifications (voir console)."); } } renderBody(); updateModalPos(); });
+    btnSave.addEventListener('click', async ()=>{
+      const now = new Date();
+      const formattedNow = formatDT(now);
+      state.data[state.selected]['Last update'] = formattedNow;
+      lastSaved.textContent = formattedNow;
+      try{
+        await saveDatasetJSON();
+        state.backup = JSON.parse(JSON.stringify(state.data[state.selected]));
+      }catch(err){
+        console.error('Sauvegarde via fiche impossible', err);
+        if(!(err && err.name==='AbortError') && (!err || !err.userMessageShown)){
+          alert("Impossible de sauvegarder les modifications (voir console).");
+        }
+      }
+      renderBody();
+      if(state.selected>=0 && state.data[state.selected]){ buildModal(state.selected); }
+      updateModalPos();
+    });
     btnPrev.addEventListener('click', ()=>{ const arr=state.filteredIdx; const pos=arr.indexOf(state.selected); if(pos>0){ openModal(arr[pos-1]); renderBody(); } });
     btnNext.addEventListener('click', ()=>{ const arr=state.filteredIdx; const pos=arr.indexOf(state.selected); if(pos>=0 && pos<arr.length-1){ openModal(arr[pos+1]); renderBody(); } });
     btnDup.addEventListener('click', ()=>{ const copy=JSON.parse(JSON.stringify(state.data[state.selected])); state.data.splice(state.selected+1,0,copy); renderBody(); updateModalPos(); });
@@ -390,7 +415,24 @@
     async function saveDatasetJSON(){ const data = buildDatasetPayload(); if(data==null){ const err = new Error('Sérialisation JSON impossible'); err.userMessageShown = true; throw err; } try{ if(window.showSaveFilePicker){ if(!datasetFileHandle){ await chooseJsonTarget('entreprises.json'); } if(datasetFileHandle && datasetFileHandle.createWritable){ await verifyPermission(datasetFileHandle, true); const w=await datasetFileHandle.createWritable(); await w.write(data); await w.close(); return; } } download(data, 'entreprises.json', 'application/json'); }catch(e){ console.error('Sauvegarde JSON impossible', e); if(!e || e.name!=='AbortError'){ alert("Écriture JSON impossible. Un téléchargement sera proposé."); } try{ download(data, 'entreprises.json', 'application/json'); }catch(downloadErr){ console.error('Téléchargement de secours impossible', downloadErr); } const err = (e && typeof e==='object')? e : new Error('Sauvegarde JSON impossible'); if(!err.userMessageShown && (!e || e.name!=='AbortError')) err.userMessageShown = true; throw err; } }
      async function pickOpenJSON(){ if(!window.showOpenFilePicker){ alert("Navigateur non supporté. Utilise Export/Import."); return; } try{ const picks = await showOpenFilePicker({ types:[{description:'JSON', accept:{'application/json':['.json']}}], multiple:false }); const h=picks && picks[0]; if(!h) return; const f=await h.getFile(); const text=await f.text(); const rows=JSON.parse(text); if(!Array.isArray(rows)){ alert("JSON invalide."); return; } ensureColumns(rows); state.data=rows; fileName.textContent = f.name + ' — ' + state.data.length + ' lignes'; renderHead(); state.page=1; renderBody(); datasetFileHandle = h; finishWizard(); }catch(e){ if(e && e.name!=='AbortError') alert("Ouverture JSON annulée ou impossible."); } }
 
-    function download(content, filename, type){ const blob=new Blob([content],{type}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 500); }
+    function download(content, filename, type){
+      const blob=new Blob([content],{type});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;
+      a.download=filename;
+      a.rel='noopener';
+      const supportsDownload = 'download' in HTMLAnchorElement.prototype;
+      if(supportsDownload){
+        a.style.display='none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } else {
+        window.open(url, '_blank');
+      }
+      setTimeout(()=>URL.revokeObjectURL(url), 1500);
+    }
 
     async function loadFromPicker(file){
       const ext = file.name.toLowerCase().split('.').pop(); fileName.textContent=file.name;

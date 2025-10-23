@@ -342,7 +342,16 @@
       const row = state.data[i]; const base = sanitizeFileName(inferTitle(row,i)); const fname = base + '.json';
       const data = JSON.stringify(row, null, 2);
       if(jsonDirHandle && jsonDirHandle.getFileHandle){
-        const fileHandle = await jsonDirHandle.getFileHandle(fname, {create:true});
+        let fileHandle = null;
+        try {
+          fileHandle = await jsonDirHandle.getFileHandle(fname, {create:false});
+        } catch(err){
+          if(err && err.name==='NotFoundError'){
+            fileHandle = await jsonDirHandle.getFileHandle(fname, {create:true});
+          } else {
+            throw err;
+          }
+        }
         const w = await fileHandle.createWritable(); await w.write(data); await w.close(); toast('Fiche enregistrée: '+fname);
       } else {
         download(data, fname, 'application/json'); toast('Téléchargement de la fiche: '+fname);

@@ -129,6 +129,21 @@
     </div>
   </div>
 
+  <!-- ModalJSON: choix du fichier JSON -->
+  <div class="overlay" id="modalJSON">
+    <div class="dialog">
+      <header><h3>Ouvrir un fichier JSON existant</h3><div class="grow"></div></header>
+      <div class="content">
+        <p>Sélectionne le fichier <code>.json</code> contenant tes données.</p>
+        <input id="mJsonFile" type="file" accept=".json" />
+      </div>
+      <footer>
+        <button class="btn" id="mJsonCancel">Annuler</button>
+        <button class="btn primary" id="mJsonLoad">Charger</button>
+      </footer>
+    </div>
+  </div>
+
   <!-- Modal3: fiche détaillée -->
   <div class="overlay" id="modal3">
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="modal3Title">
@@ -177,28 +192,18 @@
     const btnExportCSV=$("btnExportCSV"), btnExportXLSX=$("btnExportXLSX"), btnOpenWizard=$("btnOpenWizard");
     const btnNoResultsReset=$("btnNoResultsReset");
     const btnOpenJSON=$("btnOpenJSON"), btnBindJSON=$("btnBindJSON");
-    const m1=$("modal1"), m2=$("modal2"), m3=$("modal3");
+    const m1=$("modal1"), m2=$("modal2"), mJson=$("modalJSON"), m3=$("modal3");
     const m1Yes=$("m1Yes"), m1No=$("m1No");
     const m2File=$("m2File"), m2Load=$("m2Load"), m2Cancel=$("m2Cancel");
+    const mJsonFile=$("mJsonFile"), mJsonLoad=$("mJsonLoad"), mJsonCancel=$("mJsonCancel");
     const modalForm=$("modalForm"), modal3Title=$("modal3Title"), modal3Pos=$("modal3Pos"), lastSaved=$("lastSaved");
     const btnClose=$("btnClose"), btnSave=$("btnSave"), btnCancel=$("btnCancel"), btnPrev=$("btnPrev"), btnNext=$("btnNext"), btnDup=$("btnDup"), btnRemove=$("btnRemove");
-
-    function readWizardFlag(){
-      try{ return localStorage.getItem('miniCRMWizardDone')==='1'; }
-      catch(_){ return false; }
-    }
-    function persistWizardFlag(val){
-      try{
-        if(val){ localStorage.setItem('miniCRMWizardDone','1'); }
-        else { localStorage.removeItem('miniCRMWizardDone'); }
-      }catch(_){ }
-    }
 
     const settings = { status: DEFAULT_STATUS.slice(), actions: DEFAULT_ACTIONS.slice() };
     const state = { data: [], headers: [], selected: -1, filteredIdx: [], page:1, pageSize:100, backup:null };
     let datasetDirectoryHandle = null; // dossier cible (API File System Access)
     let datasetFileHandle = null; // JSON cible réutilisé à chaque sauvegarde
-    let wizardDone = readWizardFlag();
+    let wizardDone = false;
 
     function updateWizardButton(){
       if(!btnOpenWizard) return;
@@ -420,20 +425,21 @@
 
     function showModal(el){ el.classList.add('show'); }
     function hideModal(el){ el.classList.remove('show'); }
-    function finishWizard(persistDone=true){
-      try{ hideModal(m1); hideModal(m2);}catch(_){ }
-      wizardDone = !!persistDone;
-      persistWizardFlag(!!persistDone);
+    function finishWizard(){
+      try{ hideModal(m1); hideModal(m2); hideModal(mJson);}catch(_){ }
+      wizardDone = true;
       updateWizardButton();
     }
 
     async function verifyPermission(fileHandle, readWrite){ if(!fileHandle) return false; const opts = { mode: readWrite? 'readwrite' : 'read' }; if((await fileHandle.queryPermission(opts)) === 'granted') return true; if((await fileHandle.requestPermission(opts)) === 'granted') return true; return false; }
-    async function ensureJsonTarget(suggestedName, forcePrompt){
+    async function ensureJsonTarget(suggestedName, forcePrompt, startInHandle){
       if(forcePrompt){ datasetDirectoryHandle = null; datasetFileHandle = null; }
       if(datasetFileHandle){ return; }
       if(window.showSaveFilePicker){
         try{
-          const handle = await showSaveFilePicker({ suggestedName, types:[{description:'JSON', accept:{'application/json':['.json']}}] });
+          const pickerOpts = { suggestedName, types:[{description:'JSON', accept:{'application/json':['.json']}}] };
+          if(startInHandle){ pickerOpts.startIn = startInHandle; }
+          const handle = await showSaveFilePicker(pickerOpts);
           const ok = await verifyPermission(handle, true);
           if(!ok){ alert("Permission refusée: je ne pourrai pas écrire dans ce JSON."); return; }
           datasetDirectoryHandle = null;
@@ -483,8 +489,75 @@
       datasetFileHandle = null;
     }
     function buildDatasetPayload(){ try{ return JSON.stringify(state.data, null, 2); }catch(e){ console.error('Sérialisation JSON impossible', e); alert("Impossible de convertir les données en JSON (voir console)."); return null; } }
-    async function saveDatasetJSON(){ const data = buildDatasetPayload(); if(data==null){ const err = new Error('Sérialisation JSON impossible'); err.userMessageShown = true; throw err; } try{ if(window.showDirectoryPicker || window.showSaveFilePicker){ if(!datasetFileHandle){ await ensureJsonTarget('entreprises.json'); } if(datasetFileHandle && datasetFileHandle.createWritable){ await verifyPermission(datasetFileHandle, true); const w=await datasetFileHandle.createWritable(); await w.write(data); await w.close(); return; } } download(data, 'entreprises.json', 'application/json'); }catch(e){ console.error('Sauvegarde JSON impossible', e); if(!e || e.name!=='AbortError'){ alert("Écriture JSON impossible. Un téléchargement sera proposé."); } try{ download(data, 'entreprises.json', 'application/json'); }catch(downloadErr){ console.error('Téléchargement de secours impossible', downloadErr); } const err = (e && typeof e==='object')? e : new Error('Sauvegarde JSON impossible'); if(!err.userMessageShown && (!e || e.name!=='AbortError')) err.userMessageShown = true; throw err; } }
-    async function pickOpenJSON(){ if(!window.showOpenFilePicker){ alert("Navigateur non supporté. Utilise Export/Import."); return; } try{ const picks = await showOpenFilePicker({ types:[{description:'JSON', accept:{'application/json':['.json']}}], multiple:false }); const h=picks && picks[0]; if(!h) return; const f=await h.getFile(); const text=await f.text(); const rows=JSON.parse(text); if(!Array.isArray(rows)){ alert("JSON invalide."); return; } ensureColumns(rows); state.data=rows; fileName.textContent = f.name + ' — ' + state.data.length + ' lignes'; renderHead(); state.page=1; renderBody(); datasetDirectoryHandle = null; datasetFileHandle = h; finishWizard(); }catch(e){ if(e && e.name!=='AbortError') alert("Ouverture JSON annulée ou impossible."); } }
+    async function saveDatasetJSON(options={}){
+      const data = buildDatasetPayload();
+      if(data==null){
+        const err = new Error('Sérialisation JSON impossible');
+        err.userMessageShown = true;
+        throw err;
+      }
+      const startIn = options && options.startIn;
+      try{
+        if(window.showDirectoryPicker || window.showSaveFilePicker){
+          if(!datasetFileHandle){ await ensureJsonTarget('entreprises.json', false, startIn); }
+          if(datasetFileHandle && datasetFileHandle.createWritable){
+            await verifyPermission(datasetFileHandle, true);
+            const w=await datasetFileHandle.createWritable();
+            await w.write(data);
+            await w.close();
+            return;
+          }
+        }
+        download(data, 'entreprises.json', 'application/json');
+      }catch(e){
+        console.error('Sauvegarde JSON impossible', e);
+        if(!e || e.name!=='AbortError'){
+          alert("Écriture JSON impossible. Un téléchargement sera proposé.");
+        }
+        try{ download(data, 'entreprises.json', 'application/json'); }
+        catch(downloadErr){ console.error('Téléchargement de secours impossible', downloadErr); }
+        const err = (e && typeof e==='object')? e : new Error('Sauvegarde JSON impossible');
+        if(!err.userMessageShown && (!e || e.name!=='AbortError')) err.userMessageShown = true;
+        throw err;
+      }
+    }
+    async function pickOpenJSON(){
+      if(window.showOpenFilePicker){
+        try{
+          const picks = await showOpenFilePicker({ types:[{description:'JSON', accept:{'application/json':['.json']}}], multiple:false });
+          const h=picks && picks[0]; if(!h) return;
+          const f=await h.getFile();
+          await applyJSONFile(f, h);
+        }catch(e){ if(e && e.name!=='AbortError') alert("Ouverture JSON annulée ou impossible."); }
+        return;
+      }
+      if(mJson){
+        if(mJsonFile) mJsonFile.value='';
+        showModal(mJson);
+        return;
+      }
+      alert("Navigateur non supporté. Utilise Import JSON via téléchargement.");
+    }
+
+    async function applyJSONFile(file, handle){
+      try{
+        const text=await file.text();
+        const rows=JSON.parse(text);
+        if(!Array.isArray(rows)){ alert("JSON invalide."); return; }
+        ensureColumns(rows);
+        state.data=rows;
+        fileName.textContent = file.name + ' — ' + state.data.length + ' lignes';
+        renderHead();
+        state.page=1;
+        renderBody();
+        datasetDirectoryHandle = null;
+        datasetFileHandle = handle || null;
+        finishWizard();
+      }catch(e){
+        console.error('Lecture JSON impossible', e);
+        alert("JSON invalide ou illisible.");
+      }
+    }
 
     function download(content, filename, type){
       const blob=new Blob([content],{type});
@@ -505,7 +578,7 @@
       setTimeout(()=>URL.revokeObjectURL(url), 1500);
     }
 
-    async function loadFromPicker(file){
+    async function loadFromPicker(file, originHandle){
       const ext = file.name.toLowerCase().split('.').pop();
       const previousLabel = fileName.textContent;
       const previousData = state.data.slice();
@@ -517,7 +590,7 @@
       fileName.textContent=file.name;
       try{
         if(ext==='csv'){
-          const text = await file.text(); let rows = parseCsv(text); rows = ensureColumns(rows); state.data = rows; fileName.textContent = file.name + ' — ' + state.data.length + ' lignes'; renderHead(); state.page=1; renderBody(); datasetDirectoryHandle=null; datasetFileHandle=null; await ensureJsonTarget(replaceExt(file.name, '.json')); await saveDatasetJSON();
+          const text = await file.text(); let rows = parseCsv(text); rows = ensureColumns(rows); state.data = rows; fileName.textContent = file.name + ' — ' + state.data.length + ' lignes'; renderHead(); state.page=1; renderBody(); datasetDirectoryHandle=null; datasetFileHandle=null; await ensureJsonTarget(replaceExt(file.name, '.json'), false, originHandle); await saveDatasetJSON({ startIn: originHandle });
         } else {
           if(!window.XLSX){
             alert("Lecture XLSX indisponible. Convertis en CSV ou connecte Internet.");
@@ -525,7 +598,7 @@
             err.userMessageShown = true;
             throw err;
           }
-          const buf = await file.arrayBuffer(); const wb = XLSX.read(new Uint8Array(buf), {type:'array'}); const name = wb.SheetNames[0]; const sheet = wb.Sheets[name]; let rows = XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false}); rows = ensureColumns(rows); state.data=rows; fileName.textContent = file.name + ' — ' + state.data.length + ' lignes'; renderHead(); state.page=1; renderBody(); datasetDirectoryHandle=null; datasetFileHandle=null; await ensureJsonTarget(replaceExt(file.name, '.json')); await saveDatasetJSON();
+          const buf = await file.arrayBuffer(); const wb = XLSX.read(new Uint8Array(buf), {type:'array'}); const name = wb.SheetNames[0]; const sheet = wb.Sheets[name]; let rows = XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false}); rows = ensureColumns(rows); state.data=rows; fileName.textContent = file.name + ' — ' + state.data.length + ' lignes'; renderHead(); state.page=1; renderBody(); datasetDirectoryHandle=null; datasetFileHandle=null; await ensureJsonTarget(replaceExt(file.name, '.json'), false, originHandle); await saveDatasetJSON({ startIn: originHandle });
         }
         finishWizard();
       }catch(e){
@@ -547,7 +620,6 @@
         datasetDirectoryHandle = previousDirHandle;
         datasetFileHandle = previousFileHandle;
         wizardDone = false;
-        persistWizardFlag(false);
         updateWizardButton();
         if(document.body.contains(m2)){ showModal(m2); }
       }
@@ -556,18 +628,67 @@
     btnOpenWizard.addEventListener('click', ()=>{
       if(!document.body.contains(m1)) return;
       wizardDone = false;
-      persistWizardFlag(false);
       datasetDirectoryHandle = null;
       datasetFileHandle = null;
       updateWizardButton();
-      try{ hideModal(m2);}catch(_){ }
-      m2File.value='';
+      try{ hideModal(m2); hideModal(mJson);}catch(_){ }
+      if(m2File) m2File.value='';
+      if(mJsonFile) mJsonFile.value='';
       showModal(m1);
     });
-    m1Yes.addEventListener('click', ()=>{ hideModal(m1); showModal(m2); });
-    m1No.addEventListener('click', ()=>{ finishWizard(false); });
+    m1Yes.addEventListener('click', async ()=>{
+      hideModal(m1);
+      if(window.showOpenFilePicker){
+        try{
+          const picks = await showOpenFilePicker({ types:[{description:'Excel/CSV', accept:{'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':['.xlsx'], 'application/vnd.ms-excel':['.xls'], 'text/csv':['.csv']}}], multiple:false });
+          const handle = picks && picks[0];
+          if(!handle){ showModal(m1); return; }
+          const file = await handle.getFile();
+          await loadFromPicker(file, handle);
+          return;
+        }catch(e){
+          if(e && e.name==='AbortError'){ showModal(m1); return; }
+          console.warn('Choix Excel via API échoué', e);
+        }
+      }
+      showModal(m2);
+    });
+    m1No.addEventListener('click', async ()=>{
+      hideModal(m1);
+      if(window.showOpenFilePicker){
+        try{
+          const picks = await showOpenFilePicker({ types:[{description:'JSON', accept:{'application/json':['.json']}}], multiple:false });
+          const handle = picks && picks[0];
+          if(!handle){ showModal(m1); return; }
+          const file = await handle.getFile();
+          await applyJSONFile(file, handle);
+          return;
+        }catch(e){
+          if(e && e.name==='AbortError'){ showModal(m1); return; }
+          console.warn('Choix JSON via API échoué', e);
+        }
+      }
+      if(mJson){
+        if(mJsonFile) mJsonFile.value='';
+        showModal(mJson);
+      }
+    });
     m2Cancel.addEventListener('click', ()=>{ hideModal(m2); });
-    m2Load.addEventListener('click', async ()=>{ const f = m2File.files && m2File.files[0]; if(!f){ alert("Sélectionne un fichier."); return; } hideModal(m2); await loadFromPicker(f); m2File.value=''; });
+    m2Load.addEventListener('click', async ()=>{
+      const f = m2File.files && m2File.files[0];
+      if(!f){ alert("Sélectionne un fichier."); return; }
+      hideModal(m2);
+      await loadFromPicker(f, null);
+      m2File.value='';
+    });
+    mJsonCancel.addEventListener('click', ()=>{ hideModal(mJson); });
+    mJsonLoad.addEventListener('click', async ()=>{
+      const f = mJsonFile.files && mJsonFile.files[0];
+      if(!f){ alert("Sélectionne un fichier JSON."); return; }
+      hideModal(mJson);
+      await applyJSONFile(f, null);
+      mJsonFile.value='';
+    });
     btnOpenJSON.addEventListener('click', pickOpenJSON);
     btnBindJSON.addEventListener('click', async()=>{ await ensureJsonTarget('entreprises.json', true); });
 
@@ -599,6 +720,7 @@
       else {
         hideModal(m1);
         hideModal(m2);
+        hideModal(mJson);
         if(wizardDone) finishWizard();
       }
       updateWizardButton();

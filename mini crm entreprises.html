@@ -297,6 +297,7 @@
     }
 
     const activeFilters = {};
+    function resetAllFilters(){ Object.keys(activeFilters).forEach(k=> delete activeFilters[k]); }
     function updateFiltersPanel(){
       filtersWrap.innerHTML='';
       state.headers.forEach(h=>{
@@ -541,12 +542,19 @@
 
     async function applyJSONFile(file, handle){
       try{
-        const text=await file.text();
-        const rows=JSON.parse(text);
-        if(!Array.isArray(rows)){ alert("JSON invalide."); return; }
+        const rawText = await file.text();
+        const text = stripBOM(rawText);
+        let rows = JSON.parse(text);
+        if(!Array.isArray(rows) && rows && typeof rows==='object'){
+          if(Array.isArray(rows.data)) rows = rows.data;
+          else if(Array.isArray(rows.rows)) rows = rows.rows;
+          else if(Array.isArray(rows.items)) rows = rows.items;
+        }
+        if(!Array.isArray(rows)){ alert("JSON invalide: aucune liste de fiches trouvée."); return; }
         ensureColumns(rows);
         state.data=rows;
         fileName.textContent = file.name + ' — ' + state.data.length + ' lignes';
+        resetAllFilters();
         renderHead();
         state.page=1;
         renderBody();
@@ -584,13 +592,14 @@
       const previousData = state.data.slice();
       const previousHeaders = state.headers.slice();
       const previousFiltered = state.filteredIdx.slice();
+      const previousFilters = Object.assign({}, activeFilters);
       const previousPage = state.page;
       const previousDirHandle = datasetDirectoryHandle;
       const previousFileHandle = datasetFileHandle;
       fileName.textContent=file.name;
       try{
         if(ext==='csv'){
-          const text = await file.text(); let rows = parseCsv(text); rows = ensureColumns(rows); state.data = rows; fileName.textContent = file.name + ' — ' + state.data.length + ' lignes'; renderHead(); state.page=1; renderBody(); datasetDirectoryHandle=null; datasetFileHandle=null; await ensureJsonTarget(replaceExt(file.name, '.json'), false, originHandle); await saveDatasetJSON({ startIn: originHandle });
+          const text = await file.text(); let rows = parseCsv(text); rows = ensureColumns(rows); state.data = rows; fileName.textContent = file.name + ' — ' + state.data.length + ' lignes'; resetAllFilters(); renderHead(); state.page=1; renderBody(); datasetDirectoryHandle=null; datasetFileHandle=null; await ensureJsonTarget(replaceExt(file.name, '.json'), false, originHandle); await saveDatasetJSON({ startIn: originHandle });
         } else {
           if(!window.XLSX){
             alert("Lecture XLSX indisponible. Convertis en CSV ou connecte Internet.");
@@ -598,7 +607,7 @@
             err.userMessageShown = true;
             throw err;
           }
-          const buf = await file.arrayBuffer(); const wb = XLSX.read(new Uint8Array(buf), {type:'array'}); const name = wb.SheetNames[0]; const sheet = wb.Sheets[name]; let rows = XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false}); rows = ensureColumns(rows); state.data=rows; fileName.textContent = file.name + ' — ' + state.data.length + ' lignes'; renderHead(); state.page=1; renderBody(); datasetDirectoryHandle=null; datasetFileHandle=null; await ensureJsonTarget(replaceExt(file.name, '.json'), false, originHandle); await saveDatasetJSON({ startIn: originHandle });
+          const buf = await file.arrayBuffer(); const wb = XLSX.read(new Uint8Array(buf), {type:'array'}); const name = wb.SheetNames[0]; const sheet = wb.Sheets[name]; let rows = XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false}); rows = ensureColumns(rows); state.data=rows; fileName.textContent = file.name + ' — ' + state.data.length + ' lignes'; resetAllFilters(); renderHead(); state.page=1; renderBody(); datasetDirectoryHandle=null; datasetFileHandle=null; await ensureJsonTarget(replaceExt(file.name, '.json'), false, originHandle); await saveDatasetJSON({ startIn: originHandle });
         }
         finishWizard();
       }catch(e){
@@ -614,6 +623,8 @@
         state.data = previousData;
         state.headers = previousHeaders;
         state.filteredIdx = previousFiltered;
+        resetAllFilters();
+        Object.assign(activeFilters, previousFilters);
         state.page = previousPage;
         renderHead();
         renderBody();

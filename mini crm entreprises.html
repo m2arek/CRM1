@@ -397,7 +397,21 @@
     btnPrev.addEventListener('click', ()=>{ const arr=state.filteredIdx; const pos=arr.indexOf(state.selected); if(pos>0){ openModal(arr[pos-1]); renderBody(); } });
     btnNext.addEventListener('click', ()=>{ const arr=state.filteredIdx; const pos=arr.indexOf(state.selected); if(pos>=0 && pos<arr.length-1){ openModal(arr[pos+1]); renderBody(); } });
     btnDup.addEventListener('click', ()=>{ const copy=JSON.parse(JSON.stringify(state.data[state.selected])); state.data.splice(state.selected+1,0,copy); renderBody(); updateModalPos(); });
-    btnRemove.addEventListener('click', ()=>{ if(confirm('Supprimer cette fiche ?')){ const i=state.selected; const arr=state.filteredIdx; const pos=arr.indexOf(i); state.data.splice(i,1); renderBody(); if(arr[pos]){ const nextIdx = Math.min(arr[pos]||0, state.data.length-1); if(nextIdx>=0) openModal(nextIdx); else closeModal(); } else { closeModal(); } }});
+    btnRemove.addEventListener('click', ()=>{
+      if(confirm('Supprimer cette fiche ?')){
+        const i=state.selected;
+        const pos=state.filteredIdx.indexOf(i);
+        state.data.splice(i,1);
+        renderBody();
+        const targetPos = pos===-1 ? 0 : pos;
+        const next = state.filteredIdx.length ? state.filteredIdx[Math.min(targetPos, state.filteredIdx.length-1)] : undefined;
+        if(next!==undefined){
+          openModal(next);
+        }else{
+          closeModal();
+        }
+      }
+    });
 
     document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && m3.classList.contains('show')){ e.preventDefault(); closeModal(); } if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){ e.preventDefault(); if(m3.classList.contains('show')) btnSave.click(); else btnExportXLSX.click(); } });
 

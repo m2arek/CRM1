@@ -161,27 +161,6 @@
   <script type="module">
   "use strict";
   (function(){
-    const SKEY_WIZ = "miniCRM_wizardDone"; // mémorise que l'assistant est terminé (évite le loop)
-
-    const memoryStore = {};
-    function storageGet(key){
-      try{
-        const s = sessionStorage.getItem(key);
-        if(s!=null) return s;
-      }catch(_){ }
-      return Object.prototype.hasOwnProperty.call(memoryStore, key)? memoryStore[key] : null;
-    }
-    function storageSet(key, value){
-      let stored=false;
-      try{
-        sessionStorage.setItem(key, value);
-        stored=true;
-      }catch(_){ }
-      if(!stored){
-        memoryStore[key]=value;
-      }
-    }
-
     const REQUIRED = ["Statut","Action à faire","A rappeler","Alarme","Last update"];
     const DEFAULT_STATUS = ["À contacter","En cours","Rappel","Devis envoyé","Converti","Pas intéressé","Injoignable","Refusé"];
     const DEFAULT_ACTIONS = ["Rappeler","Envoyer email","Envoyer devis","Relancer facture","Planifier RDV"];
@@ -413,7 +392,6 @@
     function finishWizard(){
       try{ hideModal(m1); hideModal(m2);}catch(_){ }
       wizardDone = true;
-      storageSet(SKEY_WIZ,'1');
       try{ if(m1 && document.body.contains(m1)) m1.remove(); }catch(_){ }
       try{ if(m2 && document.body.contains(m2)) m2.remove(); }catch(_){ }
       if(btnOpenWizard){ btnOpenWizard.disabled = true; btnOpenWizard.textContent = 'Assistant terminé'; }
@@ -550,12 +528,6 @@
     }
 
     function boot(){
-      try{
-        if(storageGet(SKEY_WIZ)==='1'){
-          wizardDone=true;
-          if(btnOpenWizard){ btnOpenWizard.disabled=true; btnOpenWizard.textContent='Assistant terminé'; }
-        }
-      }catch(_){ }
       state.data=[]; state.headers=[]; state.filteredIdx=[];
       renderHead(); renderBody(); refreshParamsUI();
       if(!wizardDone && state.data.length===0){ showModal(m1); } else { hideModal(m1); hideModal(m2); }

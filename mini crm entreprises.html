@@ -406,10 +406,10 @@
 
     function showModal(el){ el.classList.add('show'); }
     function hideModal(el){ el.classList.remove('show'); }
-    function finishWizard(){
+    function finishWizard(persistDone=true){
       try{ hideModal(m1); hideModal(m2);}catch(_){ }
-      wizardDone = true;
-      persistWizardFlag(true);
+      wizardDone = !!persistDone;
+      persistWizardFlag(!!persistDone);
       updateWizardButton();
     }
 
@@ -551,7 +551,7 @@
       showModal(m1);
     });
     m1Yes.addEventListener('click', ()=>{ hideModal(m1); showModal(m2); });
-    m1No.addEventListener('click', ()=>{ hideModal(m1); finishWizard(); });
+    m1No.addEventListener('click', ()=>{ finishWizard(false); });
     m2Cancel.addEventListener('click', ()=>{ hideModal(m2); });
     m2Load.addEventListener('click', async ()=>{ const f = m2File.files && m2File.files[0]; if(!f){ alert("Sélectionne un fichier."); return; } hideModal(m2); await loadFromPicker(f); m2File.value=''; });
     btnOpenJSON.addEventListener('click', pickOpenJSON);

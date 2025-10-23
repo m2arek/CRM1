@@ -120,7 +120,7 @@
       <div class="content">
         <p>Clique sur <b>Parcourir…</b> pour sélectionner un <b>.xlsx</b> (ou <b>.csv</b>).</p>
         <input id="m2File" type="file" accept=".xlsx,.xls,.csv" />
-        <p class="hint">Après le chargement, un fichier <code>.json</code> sera créé (même nom). Tu choisiras l'emplacement du JSON (idéalement dans le même dossier que l'Excel/CSV).</p>
+        <p class="hint">Après le chargement, un fichier <code>.json</code> sera créé (même nom). Tu choisiras le fichier JSON de sauvegarde (par exemple dans le même dossier que l'Excel/CSV).</p>
       </div>
       <footer>
         <button class="btn" id="m2Cancel">Annuler</button>
@@ -413,6 +413,22 @@
     async function ensureJsonTarget(suggestedName, forcePrompt){
       if(forcePrompt){ datasetDirectoryHandle = null; datasetFileHandle = null; }
       if(datasetFileHandle){ return; }
+      if(window.showSaveFilePicker){
+        try{
+          const handle = await showSaveFilePicker({ suggestedName, types:[{description:'JSON', accept:{'application/json':['.json']}}] });
+          const ok = await verifyPermission(handle, true);
+          if(!ok){ alert("Permission refusée: je ne pourrai pas écrire dans ce JSON."); return; }
+          datasetDirectoryHandle = null;
+          datasetFileHandle = handle;
+          return;
+        }catch(e){
+          if(e && e.name==='AbortError'){ if(typeof e==='object') e.userMessageShown = true; throw e; }
+          console.error('Choix du fichier JSON annulé ou impossible', e);
+          alert("Choix du fichier JSON annulé ou impossible.");
+          if(typeof e==='object') e.userMessageShown = true;
+          throw (e && typeof e==='object')? e : new Error('Choix du fichier JSON annulé ou impossible.');
+        }
+      }
       if(datasetDirectoryHandle){
         try{
           const fh = await datasetDirectoryHandle.getFileHandle(suggestedName, { create:true });
@@ -443,22 +459,6 @@
           alert("Choix du dossier JSON annulé ou impossible.");
           if(typeof e==='object') e.userMessageShown = true;
           throw (e && typeof e==='object')? e : new Error('Choix du dossier JSON annulé ou impossible.');
-        }
-      }
-      if(window.showSaveFilePicker){
-        try{
-          const handle = await showSaveFilePicker({ suggestedName, types:[{description:'JSON', accept:{'application/json':['.json']}}] });
-          const ok = await verifyPermission(handle, true);
-          if(!ok){ alert("Permission refusée: je ne pourrai pas écrire dans ce JSON."); return; }
-          datasetDirectoryHandle = null;
-          datasetFileHandle = handle;
-          return;
-        }catch(e){
-          if(e && e.name==='AbortError'){ if(typeof e==='object') e.userMessageShown = true; throw e; }
-          console.error('Choix du fichier JSON annulé ou impossible', e);
-          alert("Choix du fichier JSON annulé ou impossible.");
-          if(typeof e==='object') e.userMessageShown = true;
-          throw (e && typeof e==='object')? e : new Error('Choix du fichier JSON annulé ou impossible.');
         }
       }
       datasetDirectoryHandle = null;

@@ -420,6 +420,7 @@
           if(!ok){ alert("Permission refusée: je ne pourrai pas écrire dans ce JSON."); return; }
           datasetDirectoryHandle = null;
           datasetFileHandle = handle;
+          finishWizard();
           return;
         }catch(e){
           if(e && e.name==='AbortError'){ if(typeof e==='object') e.userMessageShown = true; throw e; }
@@ -435,6 +436,7 @@
           const okFile = await verifyPermission(fh, true);
           if(!okFile){ alert("Permission refusée: impossible d'écrire dans ce dossier."); return; }
           datasetFileHandle = fh;
+          finishWizard();
           return;
         }catch(e){
           console.warn('Impossible de récupérer le fichier JSON depuis le dossier enregistré', e);
@@ -452,6 +454,7 @@
           if(!okFile){ alert("Permission refusée: je ne pourrai pas écrire dans ce JSON."); return; }
           datasetDirectoryHandle = dir;
           datasetFileHandle = fileHandle;
+          finishWizard();
           return;
         }catch(e){
           if(e && e.name==='AbortError'){ if(typeof e==='object') e.userMessageShown = true; throw e; }

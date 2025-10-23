@@ -183,11 +183,22 @@
     const modalForm=$("modalForm"), modal3Title=$("modal3Title"), modal3Pos=$("modal3Pos"), lastSaved=$("lastSaved");
     const btnClose=$("btnClose"), btnSave=$("btnSave"), btnCancel=$("btnCancel"), btnPrev=$("btnPrev"), btnNext=$("btnNext"), btnDup=$("btnDup"), btnRemove=$("btnRemove");
 
+    function readWizardFlag(){
+      try{ return localStorage.getItem('miniCRMWizardDone')==='1'; }
+      catch(_){ return false; }
+    }
+    function persistWizardFlag(val){
+      try{
+        if(val){ localStorage.setItem('miniCRMWizardDone','1'); }
+        else { localStorage.removeItem('miniCRMWizardDone'); }
+      }catch(_){ }
+    }
+
     const settings = { status: DEFAULT_STATUS.slice(), actions: DEFAULT_ACTIONS.slice() };
     const state = { data: [], headers: [], selected: -1, filteredIdx: [], page:1, pageSize:100, backup:null };
     let datasetDirectoryHandle = null; // dossier cible (API File System Access)
     let datasetFileHandle = null; // JSON cible réutilisé à chaque sauvegarde
-    let wizardDone = false;
+    let wizardDone = readWizardFlag();
 
     function activateTab(name){
       document.querySelectorAll('.tab').forEach(t=> t.classList.remove('active'));
@@ -392,6 +403,7 @@
     function finishWizard(){
       try{ hideModal(m1); hideModal(m2);}catch(_){ }
       wizardDone = true;
+      persistWizardFlag(true);
       try{ if(m1 && document.body.contains(m1)) m1.remove(); }catch(_){ }
       try{ if(m2 && document.body.contains(m2)) m2.remove(); }catch(_){ }
       if(btnOpenWizard){ btnOpenWizard.disabled = true; btnOpenWizard.textContent = 'Assistant terminé'; }
@@ -530,7 +542,12 @@
     function boot(){
       state.data=[]; state.headers=[]; state.filteredIdx=[];
       renderHead(); renderBody(); refreshParamsUI();
-      if(!wizardDone && state.data.length===0){ showModal(m1); } else { hideModal(m1); hideModal(m2); }
+      if(!wizardDone && state.data.length===0){ showModal(m1); }
+      else {
+        hideModal(m1);
+        hideModal(m2);
+        if(wizardDone) finishWizard();
+      }
       activateTab('recherche');
     }
     boot();
